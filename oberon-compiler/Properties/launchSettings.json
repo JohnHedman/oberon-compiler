@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "oberon-compiler": {
+      "commandName": "Project",
+      "commandLineArgs": "tokens.obr"
+    }
+  }
+}
