@@ -1,52 +1,58 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 
 namespace oberon_compiler
 {
     class Program
     {
+        //Global variables for the compiler
         const string debug_directory = "../";
-
 
         static void Main(string[] args)
         {
-            string oberonFile = debug_directory + DecodeArgs(args);
+            string oberon_file;
+            int token_count = 0;
 
-            string[] oberon_lines = System.IO.File.ReadAllLines(oberonFile);
+            char test = 'A';
+            Console.WriteLine("Int: " + ConvertToASCII(test));
 
-            for(int x = 0; x < oberon_lines.Length; x++)
+            // Make sure user put Oberon file in command line arguments
+            if (args.Length != 1)
             {
-                Console.WriteLine(oberon_lines[x]);
+                Console.WriteLine("Error: Please put file location as first argument!");
+                Environment.Exit(1);
             }
 
+            // Use the oberon file in the argument to build the Lexical Analyzer object.
+            oberon_file = debug_directory + args[0];
+            LexicalAnalyzer oberon_lex = new LexicalAnalyzer(oberon_file);
 
+            // While we haven't reached the end of the file, keep finding tokens
+            while(oberon_lex.token != "eoft")
+            {
+                oberon_lex.GetNextToken();
+                oberon_lex.DisplayToken();
+                token_count++;
+
+                // Make it so the user can read 20 tokens at a time.
+                if(token_count % 20 == 0)
+                {
+                    Console.WriteLine("Press any button to continue...");
+                    Console.ReadKey();
+                }
+            }
+
+            // Hold the output until the user wants to end the program.
             Console.Write("\nPress a key to end... ");
             Console.ReadKey();
         }
 
-
-        // Read command line arguments and find the oberon file to compile
-        static string DecodeArgs(string[] arguments)
+        static string[] TakeOutEmptyStrings(string[] string_array)
         {
-            string oberonFile;
-
-            if(arguments.Length == 1)
-            {
-                oberonFile = arguments[0];
-            }
-            else
-            {
-                Console.Write("What file should I read from: ");
-                oberonFile = Console.ReadLine();
-            }
-
-            Console.WriteLine("Gotcha, reading from: " + oberonFile + "\n");
-
-            return oberonFile;
+            return string_array.Where(x => !string.IsNullOrEmpty(x)).ToArray();
         }
-
-
-
 
     }
 }
