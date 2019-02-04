@@ -15,8 +15,9 @@ namespace oberon_compiler
             string oberon_file;
             int token_count = 0;
 
-            char test = 'A';
-            Console.WriteLine("Int: " + ConvertToASCII(test));
+            char test = '\0';
+
+            Console.WriteLine("Int: " + LexicalAnalyzer.ConvertToASCII(test));
 
             // Make sure user put Oberon file in command line arguments
             if (args.Length != 1)
@@ -30,7 +31,7 @@ namespace oberon_compiler
             LexicalAnalyzer oberon_lex = new LexicalAnalyzer(oberon_file);
 
             // While we haven't reached the end of the file, keep finding tokens
-            while(oberon_lex.token != "eoft")
+            while(oberon_lex.token != LexicalAnalyzer.Token.eoft)
             {
                 oberon_lex.GetNextToken();
                 oberon_lex.DisplayToken();
