@@ -7,41 +7,37 @@ namespace oberon_compiler
 {
     class Program
     {
-        //Global variables for the compiler
+        //File for where the test files will be located
         const string debug_directory = "../";
 
+
+        //Function: Main
+        //Purpose:  Main function of the program.  Also serves as the driver for the program
         static void Main(string[] args)
         {
             string oberon_file;
             int token_count = 0;
 
-            char test = '\0';
-
-            Console.WriteLine("Int: " + LexicalAnalyzer.ConvertToASCII(test));
-
-            // Make sure user put Oberon file in command line arguments
-            if (args.Length != 1)
-            {
-                Console.WriteLine("Error: Please put file location as first argument!");
-                Environment.Exit(1);
-            }
-
             // Use the oberon file in the argument to build the Lexical Analyzer object.
-            oberon_file = debug_directory + args[0];
+            oberon_file = debug_directory + DecodeArguments(args);
             LexicalAnalyzer oberon_lex = new LexicalAnalyzer(oberon_file);
 
+            PrintTokenHeader();
+
             // While we haven't reached the end of the file, keep finding tokens
-            while(oberon_lex.token != LexicalAnalyzer.Token.eoft)
+            while (oberon_lex.token != LexicalAnalyzer.Token.eoft)
             {
                 oberon_lex.GetNextToken();
                 oberon_lex.DisplayToken();
                 token_count++;
 
                 // Make it so the user can read 20 tokens at a time.
-                if(token_count % 20 == 0)
+                if(token_count % 25 == 0)
                 {
-                    Console.WriteLine("Press any button to continue...");
+                    Console.Write("\nPress any button to continue...");
                     Console.ReadKey();
+                    Console.Clear();
+                    PrintTokenHeader();
                 }
             }
 
@@ -50,9 +46,28 @@ namespace oberon_compiler
             Console.ReadKey();
         }
 
-        static string[] TakeOutEmptyStrings(string[] string_array)
+        //Function: PrintTokenHeader
+        //Purpose:  Print the header for the program to label the output.
+        static void PrintTokenHeader()
         {
-            return string_array.Where(x => !string.IsNullOrEmpty(x)).ToArray();
+            Console.WriteLine("Input                                              Token       Lexeme            Attribute");
+            Console.WriteLine("---------------------------------------------------------------------------------------------------------------------");
+        }
+
+        //Function: DecodeArguments
+        //Purpose:  Decodes the arguments to find the Oberon file to compile
+        static string DecodeArguments(string[] args)
+        {
+            // Make sure user put Oberon file in command line arguments
+            if (args.Length != 1)
+            {
+                Console.WriteLine("Error: Please put file location as first argument!");
+                Console.Write("\nPress a key to end... ");
+                Console.ReadKey();
+                Environment.Exit(1);
+            }
+
+            return args[0];
         }
 
     }
