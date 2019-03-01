@@ -21,25 +21,28 @@ namespace oberon_compiler
             // Use the oberon file in the argument to build the Lexical Analyzer object.
             oberon_file = debug_directory + DecodeArguments(args);
             LexicalAnalyzer oberon_lex = new LexicalAnalyzer(oberon_file);
+            RDParser rd_parser = new RDParser(oberon_lex);
 
-            PrintTokenHeader();
+            rd_parser.Parse();
 
-            // While we haven't reached the end of the file, keep finding tokens
-            while (oberon_lex.token != LexicalAnalyzer.Token.eoft)
-            {
-                oberon_lex.GetNextToken();
-                oberon_lex.DisplayToken();
-                token_count++;
+            //PrintTokenHeader();
 
-                // Make it so the user can read 20 tokens at a time.
-                if(token_count % 25 == 0)
-                {
-                    Console.Write("\nPress any button to continue...");
-                    Console.ReadKey();
-                    Console.Clear();
-                    PrintTokenHeader();
-                }
-            }
+            //// While we haven't reached the end of the file, keep finding tokens
+            //while (oberon_lex.token != LexicalAnalyzer.Token.eoft)
+            //{
+            //    oberon_lex.GetNextToken();
+            //    oberon_lex.DisplayToken();
+            //    token_count++;
+
+            //    // Make it so the user can read 20 tokens at a time.
+            //    if(token_count % 25 == 0)
+            //    {
+            //        Console.Write("\nPress any button to continue...");
+            //        Console.ReadKey();
+            //        Console.Clear();
+            //        PrintTokenHeader();
+            //    }
+            //}
 
             // Hold the output until the user wants to end the program.
             Console.Write("\nPress a key to end... ");

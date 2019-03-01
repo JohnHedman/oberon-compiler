@@ -10,17 +10,17 @@ namespace oberon_compiler
     class LexicalAnalyzer
     {
         // Enumerated type for reserved words.
-        public enum ReservedWords { MODULE, PROCEDURE, VAR, BEGIN, END, IF, THEN, ELSE, ELSIF, WHILE, DO, ARRAY, RECORD, CONST, TYPE };
+        public enum ReservedWords { MODULE, PROCEDURE, VAR, BEGIN, END, IF, THEN, ELSE, ELSIF, WHILE, DO, ARRAY, RECORD, CONST, TYPE, INTEGER, REAL, CHAR  };
 
         // Enumerated type for the different tokens that are possible.
         public enum Token
         {
             // Reserved words
-            modulet, proceduret, vart, begint, endt, ift, thent, elset, elsift, whilet, dot, arrayt, recordt, constt, typet,
+            modulet, proceduret, vart, begint, endt, ift, thent, elset, elsift, whilet, dot, arrayt, recordt, constt, typet, integert, realt, chart,
 
             relopt, addopt, mulopt, assignopt, periodt, lpart, rpart, lbrackt, rbrackt, lsqbrackt, rsqbrackt, commat, semicolt, colt, gravet, tildet,
 
-            stringt, intt, decimalt,
+            stringt, intt, decimalt, idt,
 
             eoft, unknownt, errort
         };
@@ -28,7 +28,7 @@ namespace oberon_compiler
         // Arrays for alphabet and numerics, and reserved words
         char[] alpha_chars = { 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' };
         char[] num_chars = { '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' };
-        string[] reserved_words = { "MODULE", "PROCEDURE", "VAR", "BEGIN", "END", "IF", "THEN", "ELSE", "ELSIF", "WHILE", "DO", "ARRAY", "RECORD", "CONST", "TYPE" };
+        string[] reserved_words = { "MODULE", "PROCEDURE", "VAR", "BEGIN", "END", "IF", "THEN", "ELSE", "ELSIF", "WHILE", "DO", "ARRAY", "RECORD", "CONST", "TYPE", "INTEGER", "REAL", "CHAR" };
         string[] mulop_words = { "DIV", "MOD" };
         string[] addop_words = { "OR" };
         char[] operators_chars = { '=', '#', '<', '>', '*', '/', '&', '+', '-', ':' };
@@ -39,6 +39,8 @@ namespace oberon_compiler
         public int value;
         public double valueR;
         public string literal;
+        public (int line, int character) token_start;   //token_start for outputing errors to user.
+        public (int line, int character) token_end;
 
         // Private variables
         string[] oberon_lines;
@@ -48,25 +50,22 @@ namespace oberon_compiler
         int char_index = 0;
         char current_char = ' ';
         char next_char = ' ';
-        (int line, int character) token_start;   //token_start for outputing errors to user.
-        (int line, int character) token_end;
+        
 
 
         // Constructor
         public LexicalAnalyzer(string oberon_file)
         {
             oberon_lines = System.IO.File.ReadAllLines(oberon_file);
+            Array.Resize(ref oberon_lines, oberon_lines.Length + 1);
+            oberon_lines[oberon_lines.Length - 1] = " ";
             file_length = oberon_lines.Length;
             line_length = oberon_lines[0].Length;
-            //if(line_length != 0)
-            //{
-            //    Console.WriteLine("{0}", oberon_lines[line_index]);
-            //}
-            GetNextChar();
+            GetNextChar();  // Construct the object so that it has a current_char
         }
 
         //Function: DisplayToken
-        //Purpose:  Prints the token in a specified format based on the type
+        //Purpose:  Prints the token in a specified format based on the type of token
         public void DisplayToken()
         {
             string input_lines = oberon_lines[token_start.line].TrimEnd().Replace("\t", "    ");
@@ -126,7 +125,7 @@ namespace oberon_compiler
         //          it can be.
         private void ProcessToken()
         {
-            token_start = (line_index, char_index - 1);
+            token_start = (line_index, char_index - 1);  // Keep track of where the token started for logging and errors
             lexeme = current_char.ToString();
             GetNextChar();
             lexeme += current_char;
@@ -211,7 +210,7 @@ namespace oberon_compiler
             // Oh, it's got to be a identifier, right? (Hint: it does)
             else
             {
-                token = Token.ift;
+                token = Token.idt;
             }
         }
 
