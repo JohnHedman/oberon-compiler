@@ -16,7 +16,7 @@ namespace oberon_compiler
         public enum Token
         {
             // Reserved words
-            modulet, proceduret, vart, begint, endt, ift, thent, elset, elsift, whilet, dot, arrayt, recordt, constt, typet, integert, realt, chart,
+            modulet, proceduret, vart, begint, endt, ift, thent, elset, elsift, whilet, dot, arrayt, recordt, constt, typet, chart, integert, realt,
 
             relopt, addopt, mulopt, assignopt, periodt, lpart, rpart, lbrackt, rbrackt, lsqbrackt, rsqbrackt, commat, semicolt, colt, gravet, tildet,
 

@@ -15,37 +15,37 @@ namespace oberon_compiler
         //Purpose:  Main function of the program.  Also serves as the driver for the program
         static void Main(string[] args)
         {
-            string oberon_file;
-            int token_count = 0;
+            string oberon_file = debug_directory + DecodeArguments(args);
 
-            // Use the oberon file in the argument to build the Lexical Analyzer object.
-            oberon_file = debug_directory + DecodeArguments(args);
-            LexicalAnalyzer oberon_lex = new LexicalAnalyzer(oberon_file);
-            RDParser rd_parser = new RDParser(oberon_lex);
+            RDParser parser = new RDParser(oberon_file);
+            parser.Parse();
 
-            rd_parser.Parse();
+            //Begin testing for symbol_table
+            //SymbolTable symbol_table = new SymbolTable();
 
-            //PrintTokenHeader();
+            //symbol_table.Insert("John", LexicalAnalyzer.Token.idt, 0);
+            //symbol_table.Insert("Bryan", LexicalAnalyzer.Token.idt, 0);
+            //symbol_table.Insert("Pam", LexicalAnalyzer.Token.idt, 0);
+            //symbol_table.Insert("Jamison", LexicalAnalyzer.Token.idt, 1);
+            //symbol_table.Insert("Ande", LexicalAnalyzer.Token.idt, 2);
+            //symbol_table.WriteTable(0);
 
-            //// While we haven't reached the end of the file, keep finding tokens
-            //while (oberon_lex.token != LexicalAnalyzer.Token.eoft)
-            //{
-            //    oberon_lex.GetNextToken();
-            //    oberon_lex.DisplayToken();
-            //    token_count++;
+            //TableEntry node = symbol_table.Lookup("John");
+            //Stack<TableEntry> stack = new Stack<TableEntry>();
+            //stack.Push(node);
+            //TableEntry test = stack.Pop();
+            //test.lexeme = "Jacob";
+            //Console.WriteLine("\nAfter:");
+            //symbol_table.WriteTable(0);
 
-            //    // Make it so the user can read 20 tokens at a time.
-            //    if(token_count % 25 == 0)
-            //    {
-            //        Console.Write("\nPress any button to continue...");
-            //        Console.ReadKey();
-            //        Console.Clear();
-            //        PrintTokenHeader();
-            //    }
-            //}
+            //Console.WriteLine("\nPrint depth = 1:");
+            //symbol_table.WriteTable(1);
+
+            //Console.WriteLine("\nPrint depth = 2:");
+            //symbol_table.WriteTable(2);
 
             // Hold the output until the user wants to end the program.
-            Console.Write("\nPress a key to end... ");
+            Console.Write("Press a key to end... ");
             Console.ReadKey();
         }
 
