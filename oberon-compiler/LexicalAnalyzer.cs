@@ -10,7 +10,9 @@ namespace oberon_compiler
     class LexicalAnalyzer
     {
         // Enumerated type for reserved words.
-        public enum ReservedWords { MODULE, PROCEDURE, VAR, BEGIN, END, IF, THEN, ELSE, ELSIF, WHILE, DO, ARRAY, RECORD, CONST, TYPE, INTEGER, REAL, CHAR  };
+        public enum ReservedWords { MODULE, PROCEDURE, VAR, BEGIN, END, IF, THEN, ELSE, ELSIF, WHILE, DO,
+
+        ARRAY, RECORD, CONST, TYPE, INTEGER, REAL, CHAR, READ, WRITE, WRITELN   };
 
         // Enumerated type for the different tokens that are possible.
         public enum Token
@@ -20,6 +22,8 @@ namespace oberon_compiler
 
             relopt, addopt, mulopt, assignopt, periodt, lpart, rpart, lbrackt, rbrackt, lsqbrackt, rsqbrackt, commat, semicolt, colt, gravet, tildet,
 
+            readt, writet, writelnt,
+
             stringt, intt, decimalt, idt,
 
             eoft, unknownt, errort
@@ -28,7 +32,8 @@ namespace oberon_compiler
         // Arrays for alphabet and numerics, and reserved words
         char[] alpha_chars = { 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' };
         char[] num_chars = { '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' };
-        string[] reserved_words = { "MODULE", "PROCEDURE", "VAR", "BEGIN", "END", "IF", "THEN", "ELSE", "ELSIF", "WHILE", "DO", "ARRAY", "RECORD", "CONST", "TYPE", "INTEGER", "REAL", "CHAR" };
+        string[] reserved_words = { "MODULE", "PROCEDURE", "VAR", "BEGIN", "END", "IF", "THEN", "ELSE", "ELSIF", "WHILE", "DO",
+            "ARRAY", "RECORD", "CONST", "TYPE", "INTEGER", "REAL", "CHAR", "READ", "WRITE", "WRITELN"};
         string[] mulop_words = { "DIV", "MOD" };
         string[] addop_words = { "OR" };
         char[] operators_chars = { '=', '#', '<', '>', '*', '/', '&', '+', '-', ':' };

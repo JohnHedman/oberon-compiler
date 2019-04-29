@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace oberon_compiler
@@ -15,11 +16,20 @@ namespace oberon_compiler
         private SymbolTable symbol_table;
         private int current_depth;
         private TableEntry current_node;
+        private TableEntry current_procedure;
         private List<string> identifier_list = new List<string>();
         private Stack<TableEntry> prog_procedures = new Stack<TableEntry>();
         private int current_offset = 0;
         private TableEntry.EntryType current_entry_type;
         private TableEntry.PassType current_passing_type;
+        private List<string> three_address_code = new List<string>();           // Holds the Three Address Code that we will write to file
+        private string tac_path;
+        private int parameter_depth = 0;
+
+        // Holder for NewTemp()
+        private static int i = 1;
+
+
 
         /* Function: RDParser
          * Description: Constructor for the RDParser class
@@ -37,6 +47,7 @@ namespace oberon_compiler
             lex_analyzer = new LexicalAnalyzer(oberon_file);
             symbol_table = new SymbolTable();
             current_depth = 0;
+            tac_path = oberon_file.Replace(".obr", ".tac");
         }
 
         /* Function: Parser
@@ -49,7 +60,7 @@ namespace oberon_compiler
             lex_analyzer.GetNextToken();
             Prog();
             match(LexicalAnalyzer.Token.eoft);
-            Console.WriteLine("\nFile successfully parsed!");
+            OutputThreeAddressCode();
         }
 
         /* Function: Prog
@@ -78,16 +89,19 @@ namespace oberon_compiler
                     current_node.entry_information.function.size_of_params = 0;
                     current_node.entry_information.function.number_of_parameters = 0;
                     current_node.entry_information.function.paramter_list = new LinkedList<TableEntry.ParameterNode>();
-                    current_offset = 0;
-
+                    current_offset = 2;
+                    // Push the module one the program procedure stack.
                     prog_procedures.Push(current_node);
 
                     match(LexicalAnalyzer.Token.idt);
                     match(LexicalAnalyzer.Token.semicolt);
-
                     current_depth++;
-
                     DeclarativePart();
+
+                    // We are about to encounter statements, let's print the "proc idt" three address code.
+                    current_procedure = prog_procedures.Peek();
+                    EmitCode(FormatTAC("proc", current_procedure.lexeme));
+
                     StatementPart();
                     match(LexicalAnalyzer.Token.endt);
 
@@ -105,6 +119,12 @@ namespace oberon_compiler
                         Console.ReadKey();
                         Environment.Exit(-1);
                     }
+
+                    // We are about to end the function, let's print the "Endp idt" three address code.
+                    EmitCode(FormatTAC("endp", module.lexeme));
+                    EmitCode(FormatTAC());
+
+                    EmitCode(FormatTAC("Start proc", module.lexeme));
 
                     match(LexicalAnalyzer.Token.idt);
                     match(LexicalAnalyzer.Token.periodt);
@@ -318,12 +338,12 @@ namespace oberon_compiler
                     return;
             }
 
+            // Pop the current procedure off the stack so we can update its information.
+            current_procedure = prog_procedures.Pop();
+
             // If the current entry is a variable, then we know all the identifiers in the list are variables.
             if (current_entry_type == TableEntry.EntryType.varEntry)
             {
-                // Pop the current procedure off the stack so we can update its information.
-                TableEntry current_procedure = prog_procedures.Pop();
-
                 // Go through the identifier list and add the variable to the symbol table along with other important information.
                 foreach (string identifier in identifier_list)
                 {
@@ -341,26 +361,16 @@ namespace oberon_compiler
 
                     // Update the local size of the current procedure.
                     current_procedure.entry_information.function.size_of_local += var_size;
-
-                    // Let's debug!!!
-                    //Console.WriteLine("Added " + identifier + " as variable");
                 }
-
-                // Push the current procedure back on the stack.
-                prog_procedures.Push(current_procedure);
             }
             // If the current entry is a function, then we know all the identifiers in the list are arguments.
             else if(current_entry_type == TableEntry.EntryType.functionEntry)
             {
-                // Pop the current procedure off the stack so we can update its information.
-                TableEntry current_procedure = prog_procedures.Pop();
-
                 if(current_passing_type == TableEntry.PassType.passByReference)
                 {
                     // Change the var_size to 4 in order to hold 32 bit addresses.
                     var_size = 4;
                 }
-
                 foreach (string identifier in identifier_list)
                 {
                     // Add the argument to the symbol table.
@@ -373,6 +383,7 @@ namespace oberon_compiler
                     current_node.entry_information.variable.is_parameter = true;
                     current_node.entry_information.variable.offset = current_offset;
                     current_node.entry_information.variable.size = var_size;
+                    current_node.entry_information.variable.pass_type = current_passing_type;
                     current_offset += var_size;
 
                     TableEntry.ParameterNode node = new TableEntry.ParameterNode();
@@ -381,13 +392,11 @@ namespace oberon_compiler
                     current_procedure.entry_information.function.paramter_list.AddLast(node);
                     current_procedure.entry_information.function.number_of_parameters += 1;
                     current_procedure.entry_information.function.size_of_params += var_size;
-
-                    // Let's Debug!
-                    //Console.WriteLine("Added " + identifier + " as a parameter");
                 }
-
-                prog_procedures.Push(current_procedure);
             }
+
+            // Push the current procedure back on the stack.
+            prog_procedures.Push(current_procedure);
         }
 
         /* Function: ProcPart
@@ -455,6 +464,9 @@ namespace oberon_compiler
 
             match(LexicalAnalyzer.Token.idt);
             Args();
+
+
+            current_offset = 2;
         }
 
         /* Function: Args
@@ -531,7 +543,18 @@ namespace oberon_compiler
         private void ProcBody()
         {
             DeclarativePart();
+
+            // We are about to encounter statements, let's print the "proc idt" three address code.
+            current_procedure = prog_procedures.Peek();
+            EmitCode(FormatTAC("proc", current_procedure.lexeme));
+
             StatementPart();
+
+            // We are about to end the function, let's print the "Endp idt" three address code.
+            current_procedure = prog_procedures.Peek();
+            EmitCode(FormatTAC("endp", current_procedure.lexeme));
+            EmitCode(FormatTAC());
+
             match(LexicalAnalyzer.Token.endt);
         }
 
@@ -558,15 +581,24 @@ namespace oberon_compiler
          */
         private void SeqOfStatements()
         {
-            if(lex_analyzer.token == LexicalAnalyzer.Token.idt)
+            switch (lex_analyzer.token)
             {
-                Statement();
-                match(LexicalAnalyzer.Token.semicolt);
-                StatTail();
-            }
-            else
-            {
-                Lambda();
+                case (LexicalAnalyzer.Token.idt):
+
+                case (LexicalAnalyzer.Token.readt):
+
+                case (LexicalAnalyzer.Token.writet):
+
+                case (LexicalAnalyzer.Token.writelnt):
+                    Statement();
+                    match(LexicalAnalyzer.Token.semicolt);
+                    StatTail();
+                    break;
+
+                default:
+                    Lambda();
+
+                    break;
             }
         }
 
@@ -576,15 +608,23 @@ namespace oberon_compiler
          */
         private void StatTail()
         {
-            if(lex_analyzer.token == LexicalAnalyzer.Token.idt)
+            switch (lex_analyzer.token)
             {
-                Statement();
-                match(LexicalAnalyzer.Token.semicolt);
-                StatTail();
-            }
-            else
-            {
-                Lambda();
+                case (LexicalAnalyzer.Token.idt):
+                    
+                case (LexicalAnalyzer.Token.readt):
+
+                case (LexicalAnalyzer.Token.writet):
+
+                case (LexicalAnalyzer.Token.writelnt):
+                    Statement();
+                    match(LexicalAnalyzer.Token.semicolt);
+                    StatTail();
+                    break;
+
+                default:
+                    Lambda();
+                    break;
             }
         }
 
@@ -594,13 +634,26 @@ namespace oberon_compiler
          */
         private void Statement()
         {
-            if(lex_analyzer.token == LexicalAnalyzer.Token.idt)
+            switch (lex_analyzer.token)
             {
-                AssignStat();
-            }
-            else
-            {
-                IOStat();
+                case (LexicalAnalyzer.Token.idt):
+                    AssignStat();
+                    break;
+
+                case (LexicalAnalyzer.Token.readt):
+
+                case (LexicalAnalyzer.Token.writet):
+
+                case (LexicalAnalyzer.Token.writelnt):
+                    IOStat();
+                    break;
+
+                default:
+                    Console.WriteLine("Error at {0},{1}: '{2}' was found when expecting start of statement (identifier, read, write, writeln)!", lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, lex_analyzer.lexeme);
+                    Console.Write("\nPress a key to exit... ");
+                    Console.ReadKey();
+                    Environment.Exit(-1);
+                    break;
             }
         }
 
@@ -610,11 +663,11 @@ namespace oberon_compiler
          */
         private void AssignStat()
         {
-            if(lex_analyzer.token == LexicalAnalyzer.Token.idt)
+            if (lex_analyzer.token == LexicalAnalyzer.Token.idt)
             {
                 // Look up the identifier in the symbol table and check to see if it has been declared.
                 current_node = symbol_table.Lookup(lex_analyzer.lexeme);
-                checkIfEmpty(current_node);
+                CheckIfEmpty(current_node);
 
                 if(current_node.type_of_entry == TableEntry.EntryType.functionEntry)
                 {
@@ -622,9 +675,14 @@ namespace oberon_compiler
                 }
                 else if(current_node.type_of_entry == TableEntry.EntryType.varEntry)
                 {
+                    TableEntry id_ptr = symbol_table.Lookup(lex_analyzer.lexeme);
+                    TableEntry expr_ptr = null;
+
                     match(LexicalAnalyzer.Token.idt);
                     match(LexicalAnalyzer.Token.assignopt);
-                    Expr();
+                    expr_ptr = Expr();
+
+                    EmitCode(FormatTAC(ConvertVar(id_ptr), "=", ConvertVar(expr_ptr)));
                 }
                 // If identifer is a constant, tell the user taht it is not allowed to be assigned to or called.
                 else if(current_node.type_of_entry == TableEntry.EntryType.constEntry)
@@ -654,29 +712,194 @@ namespace oberon_compiler
 
         /* Function: IOStat
          * Description: Implements the following CFG rule:
-         *              IOStat	->	Lambda
+         *              IOStat	->	InStat | OutStat
          */
         private void IOStat()
         {
-            Lambda();
+            if(lex_analyzer.token == LexicalAnalyzer.Token.readt)
+            {
+                InStat();
+            }
+            else if(lex_analyzer.token == LexicalAnalyzer.Token.writelnt || lex_analyzer.token == LexicalAnalyzer.Token.writet)
+            {
+                OutStat();
+            }
+            else
+            {
+                Console.WriteLine("Error at {0},{1}: '{2}' was found when expecting a IO command (read, write, writeln)!", lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, lex_analyzer.lexeme);
+                Console.Write("\nPress a key to exit... ");
+                Console.ReadKey();
+                Environment.Exit(-1);
+            }
+        }
+
+
+        private void InStat()
+        {
+            match(LexicalAnalyzer.Token.readt);
+            match(LexicalAnalyzer.Token.lpart);
+            IdList();
+            match(LexicalAnalyzer.Token.rpart);
+        }
+
+        private void OutStat()
+        {
+            if(lex_analyzer.token == LexicalAnalyzer.Token.writet)
+            {
+                match(LexicalAnalyzer.Token.writet);
+                match(LexicalAnalyzer.Token.lpart);
+                WriteList();
+                match(LexicalAnalyzer.Token.rpart);
+            }
+            else if(lex_analyzer.token == LexicalAnalyzer.Token.writelnt)
+            {
+                match(LexicalAnalyzer.Token.writelnt);
+                match(LexicalAnalyzer.Token.lpart);
+                WriteList();
+                match(LexicalAnalyzer.Token.rpart);
+                EmitCode(FormatTAC("wrln"));
+            }
+        }
+
+        private void IdList()
+        {
+            if(lex_analyzer.token == LexicalAnalyzer.Token.idt)
+            {
+                // Look up the identifier in the symbol table and check to see if it has been declared.
+                current_node = symbol_table.Lookup(lex_analyzer.lexeme);
+                CheckIfEmpty(current_node);
+                // See if the variable provided is a variable and if it is a integer.
+                if (current_node.type_of_entry == TableEntry.EntryType.varEntry && current_node.entry_information.variable.type_of_variable == TableEntry.VarType.intType)
+                {
+                    EmitCode(FormatTAC("rdi", ConvertVar(current_node)));
+                }
+                match(LexicalAnalyzer.Token.idt);
+                IdListTail();
+            }
+            else
+            {
+                Console.WriteLine("Error at {0},{1}: '{2}' was found as a parameter inside of the read() function, which can only have identifiers as parameters!", lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, lex_analyzer.lexeme);
+                Console.Write("\nPress a key to exit... ");
+                Console.ReadKey();
+                Environment.Exit(-1);
+            }
+        }
+
+        private void IdListTail()
+        {
+            if(lex_analyzer.token == LexicalAnalyzer.Token.commat)
+            {
+                match(LexicalAnalyzer.Token.commat);
+                if (lex_analyzer.token == LexicalAnalyzer.Token.idt)
+                {
+                    // Look up the identifier in the symbol table and check to see if it has been declared.
+                    current_node = symbol_table.Lookup(lex_analyzer.lexeme);
+                    CheckIfEmpty(current_node);
+                    // See if the variable provided is a variable and if it is a integer.
+                    if (current_node.type_of_entry == TableEntry.EntryType.varEntry && current_node.entry_information.variable.type_of_variable == TableEntry.VarType.intType)
+                    {
+                        EmitCode(FormatTAC("rdi", ConvertVar(current_node)));
+                    }
+                    match(LexicalAnalyzer.Token.idt);
+                    IdListTail();
+                }
+                else
+                {
+                    Console.WriteLine("Error at {0},{1}: '{2}' was found as a parameter inside of the read() function, which can only have identifiers as parameters!", lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, lex_analyzer.lexeme);
+                    Console.Write("\nPress a key to exit... ");
+                    Console.ReadKey();
+                    Environment.Exit(-1);
+                }
+                match(LexicalAnalyzer.Token.idt);
+                IdListTail();
+            }
+            else
+            {
+                Lambda();
+            }
+        }
+
+        private void WriteList()
+        {
+            WriteToken();
+            WriteListTail();
+        }
+
+        private void WriteListTail()
+        {
+            if (lex_analyzer.token == LexicalAnalyzer.Token.commat)
+            {
+                match(LexicalAnalyzer.Token.commat);
+                WriteToken();
+                WriteListTail();
+            }
+            else
+            {
+                Lambda();
+            }
+        }
+
+        private void WriteToken()
+        {
+            if(lex_analyzer.token == LexicalAnalyzer.Token.idt)
+            {
+                // Look up the identifier in the symbol table and check to see if it has been declared.
+                current_node = symbol_table.Lookup(lex_analyzer.lexeme);
+                CheckIfEmpty(current_node);
+                // See if the variable provided is a variable and if it is a integer.
+                if (current_node.type_of_entry == TableEntry.EntryType.varEntry && current_node.entry_information.variable.type_of_variable == TableEntry.VarType.intType)
+                {
+                    EmitCode(FormatTAC("wri", ConvertVar(current_node)));
+                }
+                match(LexicalAnalyzer.Token.idt);
+            }
+            else if(lex_analyzer.token == LexicalAnalyzer.Token.intt)
+            {
+                EmitCode(FormatTAC("wri", lex_analyzer.lexeme));
+                match(LexicalAnalyzer.Token.intt);
+            }
+            else if(lex_analyzer.token == LexicalAnalyzer.Token.decimalt)
+            {
+                EmitCode(FormatTAC("wrd", lex_analyzer.lexeme));
+                match(LexicalAnalyzer.Token.decimalt);
+            }
+            else if(lex_analyzer.token == LexicalAnalyzer.Token.stringt)
+            {
+                // If it is a string, just print wrs followed by the string litteral
+                EmitCode(FormatTAC("wrs", lex_analyzer.lexeme));
+                match(LexicalAnalyzer.Token.stringt);
+            }
+            else
+            {
+                Console.WriteLine("Error at {0},{1}: '{2}' was found as a parameter inside of the write()/writeln() function, which only supports identifiers, numeric literals, or string literals as parameters!", lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, lex_analyzer.lexeme);
+                Console.Write("\nPress a key to exit... ");
+                Console.ReadKey();
+                Environment.Exit(-1);
+            }
         }
 
         /* Function: Expr
          * Description: Implements the following CFG rule:
          *              Expr	->	Relation
          */
-        private void Expr()
+        private TableEntry Expr()
         {
-            Relation();
+            TableEntry rel_ptr = null;
+
+            rel_ptr = Relation();
+            return rel_ptr;
         }
 
         /* Function: Relation
          * Description: Implements the following CFG rule:
          *              Relation	->	SimpleExpr
          */
-        private void Relation()
+        private TableEntry Relation()
         {
-            SimpleExpr();
+            TableEntry simple_expr_ptr = null;
+
+            simple_expr_ptr = SimpleExpr();
+            return simple_expr_ptr;
         }
 
 
@@ -684,27 +907,49 @@ namespace oberon_compiler
          * Description: Implements the following CFG rule:
          *              SimpleExpr	->	Term MoreTerm
          */
-        private void SimpleExpr()
+        private TableEntry SimpleExpr()
         {
-            Term();
-            MoreTerm();
+            TableEntry T_ptr = null;
+
+            T_ptr = Term();
+            T_ptr = MoreTerm(T_ptr);
+
+            return T_ptr;
         }
 
         /* Function: MoreTerm
          * Description: Implements the following CFG rule:
          *              MoreTerm	->	Addop Term MoreTerm | Lambda
          */
-        private void MoreTerm()
+        private TableEntry MoreTerm(TableEntry more_term_place)
         {
-            if(lex_analyzer.token == LexicalAnalyzer.Token.addopt)
+            if (lex_analyzer.token == LexicalAnalyzer.Token.addopt)
             {
+                TableEntry tmp_ptr = NewTemp();
+                TableEntry T_ptr = null;
+
+                // Add offset information to the temp variable.
+                tmp_ptr.entry_information.variable.offset = current_offset;
+                tmp_ptr.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
+                tmp_ptr.entry_information.variable.size = 2;
+                tmp_ptr.entry_information.variable.is_parameter = false;
+                current_offset += 2;
+
+                string op = lex_analyzer.lexeme;
                 match(LexicalAnalyzer.Token.addopt);
-                Term();
-                MoreTerm();
+                T_ptr = Term();
+                // CalculateTempSize is a type checking part of the compiler that does not
+                // need to be used for assignment 7!
+                //CalculateTempSize(ref tmp_ptr, more_term_place, T_ptr);
+                EmitCode(FormatTAC(ConvertVar(tmp_ptr), "=", ConvertVar(more_term_place), op, ConvertVar(T_ptr)));
+
+                more_term_place = tmp_ptr;
+                return MoreTerm(more_term_place);
             }
             else
             {
                 Lambda();
+                return more_term_place;
             }
         }
 
@@ -712,27 +957,48 @@ namespace oberon_compiler
          * Description: Implements the following CFG rule:
          *              Term	->	Factor MoreFactor
          */
-        private void Term()
+        private TableEntry Term()
         {
-            Factor();
-            MoreFactor();
+            TableEntry F_ptr = null;
+
+            F_ptr = Factor(F_ptr);
+            F_ptr = MoreFactor(F_ptr);
+
+            return F_ptr;
         }
 
         /* Function: MoreFactor
          * Description: Implements the following CFG rule:
          *              MoreFactor	-> Mulop Factor MoreFactor | Lambda
          */
-        private void MoreFactor()
+        private TableEntry MoreFactor(TableEntry more_factor_place)
         {
             if (lex_analyzer.token == LexicalAnalyzer.Token.mulopt)
             {
+                TableEntry tmp_ptr = NewTemp();
+                TableEntry F_ptr = null;
+
+                // Add offset information to the temp variable.
+                tmp_ptr.entry_information.variable.offset = current_offset;
+                tmp_ptr.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
+                tmp_ptr.entry_information.variable.size = 2;
+                tmp_ptr.entry_information.variable.is_parameter = false;
+                current_offset += 2;
+
+                string op = lex_analyzer.lexeme;
                 match(LexicalAnalyzer.Token.mulopt);
-                Factor();
-                MoreFactor();
+                F_ptr = Factor(F_ptr);
+
+                ChangeTempFactor(tmp_ptr, F_ptr, more_factor_place);
+                EmitCode(FormatTAC(ConvertVar(tmp_ptr), "=", ConvertVar(more_factor_place), op, ConvertVar(F_ptr)));
+
+                more_factor_place = tmp_ptr;
+                return MoreFactor(more_factor_place);
             }
             else
             {
                 Lambda();
+                return more_factor_place;
             }
         }
 
@@ -744,42 +1010,85 @@ namespace oberon_compiler
          *                          ~ Factor |
          *                          SignOp Factor
          */
-        private void Factor()
+        private TableEntry Factor(TableEntry F_ptr)
         {
+            TableEntry temp_ptr;
+
             switch (lex_analyzer.token)
             {
                 case LexicalAnalyzer.Token.idt:
                     // Look up the identifier in the symbol table and check to see if it has been declared.
-                    current_node = symbol_table.Lookup(lex_analyzer.lexeme);
-                    checkIfEmpty(current_node);
-
+                    F_ptr = symbol_table.Lookup(lex_analyzer.lexeme);
+                    CheckIfEmpty(F_ptr);
                     match(LexicalAnalyzer.Token.idt);
                     break;
 
                 case LexicalAnalyzer.Token.intt:
+                    F_ptr = NewTemp();
+                    F_ptr.entry_information.variable.size = 2; F_ptr.entry_information.variable.is_parameter = false;
+                    F_ptr.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
+                    current_offset += 2;
+                    EmitCode(FormatTAC(ConvertVar(F_ptr), "=", lex_analyzer.lexeme));
                     match(LexicalAnalyzer.Token.intt);
                     break;
 
                 case LexicalAnalyzer.Token.decimalt:
+                    F_ptr = NewTemp();
+                    F_ptr.entry_information.variable.size = 4; F_ptr.entry_information.variable.is_parameter = false;
+                    F_ptr.entry_information.variable.type_of_variable = TableEntry.VarType.floatType;
+                    current_offset += 4;
+                    EmitCode(FormatTAC(ConvertVar(F_ptr), "=", lex_analyzer.lexeme));
                     match(LexicalAnalyzer.Token.decimalt);
                     break;
 
                 case LexicalAnalyzer.Token.lpart:
                     match(LexicalAnalyzer.Token.lpart);
-                    Expr();
+                    F_ptr = Expr();
                     match(LexicalAnalyzer.Token.rpart);
                     break;
 
                 case LexicalAnalyzer.Token.tildet:
+
+                    // Create a temp variable to hold negated Factor
+                    temp_ptr = NewTemp();
+
+                    temp_ptr.entry_information.variable.size = 2;
+                    temp_ptr.entry_information.variable.is_parameter = false;
+                    temp_ptr.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
+                    temp_ptr.entry_information.variable.offset = current_offset; current_offset += 2;
+
                     match(LexicalAnalyzer.Token.tildet);
-                    Factor();
+                    F_ptr = Factor(F_ptr);
+
+                    // Generate the TAC code for the ~Factor
+                    EmitCode(FormatTAC(ConvertVar(temp_ptr), "=", ConvertVar(F_ptr) , "~"));
+
+                    // We need to return the 1's complement Factor value instead of the Factor value!
+                    F_ptr = temp_ptr;
+
                     break;
 
-                default:
+                default: 
                     if(lex_analyzer.lexeme == "-")
                     {
                         SignOp();
-                        Factor();
+
+                        // Create a temp variable to hold negated Factor
+                        temp_ptr = NewTemp();
+
+                        temp_ptr.entry_information.variable.size = 2;
+                        temp_ptr.entry_information.variable.is_parameter = false;
+                        temp_ptr.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
+                        temp_ptr.entry_information.variable.offset = current_offset; current_offset += 2;
+
+                        // Get the Factor we need to negate
+                        F_ptr = Factor(F_ptr);
+
+                        // Generate the TAC code for the -Factor
+                        EmitCode(FormatTAC(ConvertVar(temp_ptr), "=", "-1", "*", ConvertVar(F_ptr)));
+
+                        // We need to return the negated Factor value instead of the Factor value!
+                        F_ptr = temp_ptr;
                     }
                     else
                     {
@@ -791,6 +1100,8 @@ namespace oberon_compiler
 
                     break;
             }
+
+            return F_ptr;
         }
 
         /* Function: Addop
@@ -832,7 +1143,7 @@ namespace oberon_compiler
          *              If it isn't in the table, tell the user that they must declare it before
          *              using it.  If it is in the table, then carry on with parsing the input file.
          */
-        public void checkIfEmpty(TableEntry node)
+        public void CheckIfEmpty(TableEntry node)
         {
             // If the identifier was not found inside of the symbol table, then tell the user and exit.
             if (current_node == null)
@@ -851,29 +1162,74 @@ namespace oberon_compiler
 
         public void ProcCall()
         {
+            string procedure_identifier = lex_analyzer.lexeme;
+            current_procedure = symbol_table.Lookup(procedure_identifier);
+
             match(LexicalAnalyzer.Token.idt);
             match(LexicalAnalyzer.Token.lpart);
+
+            parameter_depth = 0;
             Params();
             match(LexicalAnalyzer.Token.rpart);
+
+            EmitCode(FormatTAC("call", procedure_identifier));
         }
 
 
         public void Params()
         {
-            if(lex_analyzer.token == LexicalAnalyzer.Token.idt)
+            TableEntry.ParameterNode parameter;
+
+            // Try to find the expected parameter in the procedure paramater list.
+            try
             {
-                match(LexicalAnalyzer.Token.idt);
-                ParamsTail();
+                parameter = current_procedure.entry_information.function.paramter_list.ElementAt(parameter_depth);
             }
-            else if(lex_analyzer.token == LexicalAnalyzer.Token.intt)
+            // If we get a "ArgumentOutOfRangeException, then we know that there is no other parameters.
+            catch (ArgumentOutOfRangeException)
             {
-                match(LexicalAnalyzer.Token.intt);
-                ParamsTail();
+                parameter = null;
             }
-            else if(lex_analyzer.token == LexicalAnalyzer.Token.decimalt)
+            if(lex_analyzer.token == LexicalAnalyzer.Token.idt || lex_analyzer.token == LexicalAnalyzer.Token.intt || lex_analyzer.token == LexicalAnalyzer.Token.decimalt)
             {
-                match(LexicalAnalyzer.Token.decimalt);
-                ParamsTail();
+                if(parameter == null)
+                {
+                    Console.WriteLine("Error at {0},{1}: the argument '{2}' was found inside of a call to '{3}' which does not support any parameters!",
+                        lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, lex_analyzer.lexeme, current_procedure.lexeme, current_procedure.entry_information.function.number_of_parameters);
+                    Console.Write("\nPress a key to exit... ");
+                    Console.ReadKey();
+                    Environment.Exit(-1);
+                }
+
+                if (lex_analyzer.token == LexicalAnalyzer.Token.idt)
+                {
+                    TableEntry argument = symbol_table.Lookup(lex_analyzer.lexeme);
+                    CheckIfEmpty(argument);
+                    CheckArgumentType(argument, parameter);
+                    if(parameter.pass_type == TableEntry.PassType.passByValue)
+                    {
+                        EmitCode(FormatTAC("push", lex_analyzer.lexeme));
+                    }
+                    else
+                    {
+                        EmitCode(FormatTAC("push", "@" + lex_analyzer.lexeme));
+                    }
+                    match(LexicalAnalyzer.Token.idt);
+                    ParamsTail();
+                }
+                else if (lex_analyzer.token == LexicalAnalyzer.Token.intt)
+                {
+                    EmitCode(FormatTAC("Push", lex_analyzer.lexeme));
+                    match(LexicalAnalyzer.Token.intt);
+                    ParamsTail();
+                }
+                else if (lex_analyzer.token == LexicalAnalyzer.Token.decimalt)
+                {
+                    EmitCode(FormatTAC("Push", lex_analyzer.lexeme));
+                    match(LexicalAnalyzer.Token.decimalt);
+                    ParamsTail();
+                }
+
             }
             else
             {
@@ -884,31 +1240,94 @@ namespace oberon_compiler
 
         public void ParamsTail()
         {
-            if(lex_analyzer.token == LexicalAnalyzer.Token.commat)
+            parameter_depth++;
+            TableEntry.ParameterNode parameter;
+
+            try
+            {
+                parameter = current_procedure.entry_information.function.paramter_list.ElementAt(parameter_depth);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                parameter = null;
+            }
+
+            if (lex_analyzer.token == LexicalAnalyzer.Token.commat)
             {
                 match(LexicalAnalyzer.Token.commat);
 
-                if (lex_analyzer.token == LexicalAnalyzer.Token.idt)
+                if (lex_analyzer.token == LexicalAnalyzer.Token.idt || lex_analyzer.token == LexicalAnalyzer.Token.intt || lex_analyzer.token == LexicalAnalyzer.Token.decimalt)
                 {
-                    match(LexicalAnalyzer.Token.idt);
-                    ParamsTail();
-                }
-                else if (lex_analyzer.token == LexicalAnalyzer.Token.intt)
-                {
-                    match(LexicalAnalyzer.Token.intt);
-                    ParamsTail();
-                }
-                else if(lex_analyzer.token == LexicalAnalyzer.Token.decimalt)
-                {
-                    match(LexicalAnalyzer.Token.decimalt);
-                    ParamsTail();
-                }
-                else
-                {
-                    Console.WriteLine("Error at {0},{1}: the lexeme '{2}' was found when expecting a parameter (identifier, integer, or real number)!", lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, lex_analyzer.lexeme);
-                    Console.Write("\nPress a key to exit... ");
-                    Console.ReadKey();
-                    Environment.Exit(-1);
+                    if (parameter == null)
+                    {
+                        Console.WriteLine("Error at {0},{1}: At least {2} arguments were found inside of a call to '{3}' which only supports {4} arguments!",
+                            lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, current_procedure.entry_information.function.number_of_parameters + 1, current_procedure.lexeme, current_procedure.entry_information.function.number_of_parameters);
+                        Console.Write("\nPress a key to exit... ");
+                        Console.ReadKey();
+                        Environment.Exit(-1);
+                    }
+
+                    if (lex_analyzer.token == LexicalAnalyzer.Token.idt)
+                    {
+                        TableEntry argument = symbol_table.Lookup(lex_analyzer.lexeme);
+                        CheckIfEmpty(argument);
+                        CheckArgumentType(argument, parameter);
+                        if (parameter.pass_type == TableEntry.PassType.passByValue)
+                        {
+                            EmitCode(FormatTAC("push", lex_analyzer.lexeme));
+                        }
+                        else
+                        {
+                            EmitCode(FormatTAC("push", "@" + lex_analyzer.lexeme));
+                        }
+                        match(LexicalAnalyzer.Token.idt);
+                        ParamsTail();
+                    }
+                    else if (lex_analyzer.token == LexicalAnalyzer.Token.intt)
+                    {
+                        if(parameter.pass_type == TableEntry.PassType.passByReference)
+                        {
+                            Console.WriteLine("Error at {0},{1}: The numeric literal {2} as found in the call to '{3}' which expects a pass by reference.",
+                                lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, lex_analyzer.lexeme, current_procedure.lexeme);
+                            Console.WriteLine("Numeric literals can not be passed by reference!");
+                            Console.Write("\nPress a key to exit... ");
+                            Console.ReadKey();
+                            Environment.Exit(-1);
+                        }
+                        else
+                        {
+                            EmitCode(FormatTAC("Push", lex_analyzer.lexeme));
+                            match(LexicalAnalyzer.Token.intt);
+                            ParamsTail();
+                        }
+                    }
+                    else if (lex_analyzer.token == LexicalAnalyzer.Token.decimalt)
+                    {
+                        if (parameter.pass_type == TableEntry.PassType.passByReference)
+                        {
+                            Console.WriteLine("Error at {0},{1}: The numeric literal {2} as found in the call to '{3}' which expects a pass by reference.",
+                                lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, lex_analyzer.lexeme, current_procedure.lexeme);
+                            Console.WriteLine("Numeric literals can not be passed by reference!");
+                            Console.Write("\nPress a key to exit... ");
+                            Console.ReadKey();
+                            Environment.Exit(-1);
+                        }
+                        else
+                        {
+                            EmitCode(FormatTAC("Push", lex_analyzer.lexeme));
+                            match(LexicalAnalyzer.Token.decimalt);
+                            ParamsTail();
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("Error at {0},{1}: the lexeme '{2}' was found when expecting a parameter (identifier, integer, or real)!",
+                            lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, lex_analyzer.lexeme);
+                        Console.Write("\nPress a key to exit... ");
+                        Console.ReadKey();
+                        Environment.Exit(-1);
+                    }
+
                 }
             }
             else
@@ -916,9 +1335,6 @@ namespace oberon_compiler
                 Lambda();
             }
         }
-
-
-
 
         /* Function: Lambda
         * Description: Function that is a place holder for better readability when looking at the code
@@ -970,6 +1386,272 @@ namespace oberon_compiler
                 Console.ReadKey();
                 Environment.Exit(-1);
             }
+        }
+
+        private string ConvertVar(TableEntry var)
+        {
+            // If the variable is further then depth 1, we need to convert it to the BP stack offset.
+            if(var.symbol_depth > 1)
+            {
+                if(var.type_of_entry == TableEntry.EntryType.varEntry)
+                {
+                    // If the variable is a parameter in a function.
+                    if (var.entry_information.variable.is_parameter)
+                    {
+                        current_procedure = prog_procedures.Peek();
+
+                        if(var.entry_information.variable.pass_type == TableEntry.PassType.passByValue)
+                        {
+                            return "_bp+" + (current_procedure.entry_information.function.size_of_params - var.entry_information.variable.offset - var.entry_information.variable.size + 4).ToString();
+                        }
+                        else
+                        {
+                            return "@_bp+" + (current_procedure.entry_information.function.size_of_params - var.entry_information.variable.offset - var.entry_information.variable.size + 4).ToString();
+                        }
+                    }
+                    else
+                    {
+                        return "_bp-" + var.entry_information.variable.offset;
+                    }
+                }
+                else if(var.type_of_entry == TableEntry.EntryType.constEntry)
+                {
+                    return "_bp-" + var.entry_information.constant.offset;
+                }
+            }
+            // If the variable is in depth 1, then we can use the global data segment.
+            // This means that we can just use the actual symbol lexeme.
+            else
+            {
+                return var.lexeme;
+            }
+
+            return " ";
+
+        }
+
+        private void CalculateTempSize(ref TableEntry temp_var, TableEntry var1, TableEntry var2)
+        {
+            int var1_size = 0;
+            TableEntry.VarType var1_type = TableEntry.VarType.intType;
+
+            int var2_size = 0;
+            TableEntry.VarType var2_type = TableEntry.VarType.intType;
+
+            temp_var.type_of_entry = TableEntry.EntryType.varEntry;
+
+            if (var1.type_of_entry == TableEntry.EntryType.varEntry)
+            {
+                var1_size = var1.entry_information.variable.size;
+                var1_type = var1.entry_information.variable.type_of_variable;
+            }
+            else if(var1.type_of_entry == TableEntry.EntryType.constEntry)
+            {
+                var1_size = var1.entry_information.constant.size;
+                var1_type = var1.entry_information.constant.type_of_constant;
+            }
+            else
+            {
+                Console.WriteLine("ERROR in calculate temp size!");
+                Console.Write("\nPress a key to exit... ");
+                Console.ReadKey();
+                Environment.Exit(-1);
+            }
+
+            if (var2.type_of_entry == TableEntry.EntryType.varEntry)
+            {
+                var2_size = var2.entry_information.variable.size;
+                var2_type = var2.entry_information.variable.type_of_variable;
+            }
+            else if (var2.type_of_entry == TableEntry.EntryType.constEntry)
+            {
+                var2_size = var2.entry_information.constant.size;
+                var2_type = var2.entry_information.constant.type_of_constant;
+            }
+            else
+            {
+                Console.WriteLine("ERROR in calculate temp size!");
+                Console.Write("\nPress a key to exit... ");
+                Console.ReadKey();
+                Environment.Exit(-1);
+            }
+
+            if (var1_size > var2_size)
+            {
+                temp_var.entry_information.variable.size = var1_size;
+            }
+            else
+            {
+                temp_var.entry_information.variable.size = var2_size;
+            }
+
+            switch (var1_type)
+            {
+                case TableEntry.VarType.charType:
+                    switch (var2_type)
+                    {
+                        case TableEntry.VarType.charType:
+                            temp_var.entry_information.variable.type_of_variable = TableEntry.VarType.charType;
+                            break;
+                        case TableEntry.VarType.intType:
+                            temp_var.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
+                            break;
+                        case TableEntry.VarType.floatType:
+                            temp_var.entry_information.variable.type_of_variable = TableEntry.VarType.floatType;
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                case TableEntry.VarType.intType:
+                    switch (var2_type)
+                    {
+                        case TableEntry.VarType.charType:
+                            temp_var.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
+                            break;
+                        case TableEntry.VarType.intType:
+                            temp_var.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
+                            break;
+                        case TableEntry.VarType.floatType:
+                            temp_var.entry_information.variable.type_of_variable = TableEntry.VarType.floatType;
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                case TableEntry.VarType.floatType:
+                    switch (var2_type)
+                    {
+                        case TableEntry.VarType.charType:
+                            temp_var.entry_information.variable.type_of_variable = TableEntry.VarType.floatType;
+                            break;
+                        case TableEntry.VarType.intType:
+                            temp_var.entry_information.variable.type_of_variable = TableEntry.VarType.floatType;
+                            break;
+                        case TableEntry.VarType.floatType:
+                            temp_var.entry_information.variable.type_of_variable = TableEntry.VarType.floatType;
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                default:
+                    break;
+            }
+
+            temp_var.symbol_depth = current_depth; temp_var.entry_information.variable.is_parameter = false;
+            temp_var.entry_information.variable.offset = current_offset;
+            current_offset += temp_var.entry_information.variable.size;
+        }
+
+        private void CheckArgumentType(TableEntry argument, TableEntry.ParameterNode parameter)
+        {
+            if(argument.type_of_entry == TableEntry.EntryType.constEntry)
+            {
+                if(parameter.pass_type == TableEntry.PassType.passByReference)
+                {
+                    Console.WriteLine("Error at {0},{1}: the constant '{2}' was found as a argument to a call to '{3}' which requires a pass by reference.  Constants can not be passed by reference!",
+                        lex_analyzer.token_start.line + 1, lex_analyzer.token_start.character + 1, argument.lexeme, current_procedure.lexeme);
+                    Console.Write("\nPress a key to exit... ");
+                    Console.ReadKey();
+                    Environment.Exit(-1);
+                }
+            }
+        }
+
+        private void ChangeTempFactor(TableEntry tmp, TableEntry fac1, TableEntry fac2)
+        {
+            switch (fac1.type_of_entry)
+            {
+                case TableEntry.EntryType.constEntry:
+                    break;
+                case TableEntry.EntryType.varEntry:
+                    break;
+                case TableEntry.EntryType.functionEntry:
+                    Console.WriteLine("Error at line {0}: the procedure '{2}' was found in an arithmetic expression, which is not allowed!",
+                        lex_analyzer.token_start.line + 1, fac1.lexeme);
+                    Console.Write("\nPress a key to exit... ");
+                    Console.ReadKey();
+                    Environment.Exit(-1);
+                    break;
+                case TableEntry.EntryType.moduleEntry:
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        //private void ProcedureInArithmeticExpression(TableEntry entry)
+        //{
+        //    Console.WriteLine("Error at line {0}: the procedure '{2}' was found in an arithmetic expression, which is not allowed!",
+        //                lex_analyzer.token_start.line + 1, fac1.lexeme);
+        //    Console.Write("\nPress a key to exit... ");
+        //    Console.ReadKey();
+        //    Environment.Exit(-1);
+        //}
+
+        private TableEntry NewTemp()
+        {
+            string temp = "_t" + i.ToString();
+            symbol_table.Insert(temp, LexicalAnalyzer.Token.idt, current_depth, lex_analyzer);
+
+            TableEntry entry = symbol_table.Lookup(temp);
+            entry.type_of_entry = TableEntry.EntryType.varEntry;
+            entry.entry_information.variable.offset = current_offset;
+
+            i++;
+            return entry;
+        }
+
+        private void EmitCode(string code)
+        {
+            three_address_code.Add(code);
+        }
+
+
+        private void PrintHeader()
+        {
+            Console.WriteLine("{0, -10} {1, -1} {2, -10} {3, -1} {4, -10}", "REG/VAR", " ", "REG/VAR", "OP", "REG/VAR");
+        }
+
+        private string FormatTAC(string id1 = " ", string equals = " ", string id2= " ", string op = " ", string id3 = " ")
+        {
+            return String.Format("{0, -10} {1, -5} {2, -10} {3, -5} {4, -10}", id1, equals, id2, op, id3);
+        }
+
+
+        private void OutputThreeAddressCode()
+        {
+            // Convert the list of three address code statements that we have to an array
+            // and print them to the TAC file.
+            string[] tac_lines = three_address_code.ToArray();
+            System.IO.File.WriteAllLines(tac_path, tac_lines);
+
+            int line_number = 1;
+            Console.WriteLine("\nThree Address Code:");
+            Console.WriteLine("-------------------");
+
+            foreach (string line in tac_lines)
+            {
+                if (line_number % 20 == 0)
+                {
+                    Console.WriteLine("\nPress any continue to continue...");
+                    Console.ReadKey();
+                    Console.WriteLine("\nMore Three Address Code:");
+                    Console.WriteLine("------------------------");
+                }
+
+                Console.WriteLine(line);
+                line_number++;
+            }
+
+            Console.WriteLine("\n\nTAC has been written to: " + tac_path.Replace("../", ""));
+        }
+
+        private void PrintTACHeader()
+        {
+            Console.WriteLine("\n{0, -10} {1, -5} {2, -10} {3, -5} {4, -10}", "Variable", "", "operand", "operation", "operand");
+            Console.WriteLine("----------------------------------------------------------------------------------------------------------");
         }
     }
 }

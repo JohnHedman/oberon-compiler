@@ -131,6 +131,10 @@ namespace oberon_compiler
                     node = node.Next;
                 }
             }
+
+            Console.WriteLine("\nPress any continue to continue...");
+            Console.ReadKey();
+
         }
 
         public void PrintEntryHeader()
@@ -152,7 +156,14 @@ namespace oberon_compiler
                     break;
                 case TableEntry.EntryType.varEntry:
                     TableEntry.Variable var_info = entry.entry_information.variable;
-                    entryInformation = String.Format("Offset : {0, -5} Type : {1, -10} Size : {2, -5}", var_info.offset, varToString(var_info.type_of_variable), var_info.size);
+                    if(var_info.is_parameter == true)
+                    {
+                        entryInformation = String.Format("Offset : {0, -5} Type : {1, -10} Size : {2, -5} Param: True", var_info.offset, varToString(var_info.type_of_variable), var_info.size);
+                    }
+                    else
+                    {
+                        entryInformation = String.Format("Offset : {0, -5} Type : {1, -10} Size : {2, -5} Param: False", var_info.offset, varToString(var_info.type_of_variable), var_info.size);
+                    }
                     Console.WriteLine("{0, -17} {1, -9} {2, -9} {3, -8} {4}", entry.lexeme, entry.token, "Variable", entry.symbol_depth, entryInformation);
                     break;
                 case TableEntry.EntryType.functionEntry:
@@ -234,7 +245,7 @@ namespace oberon_compiler
         public EntryInformation entry_information;
 
         // Need to make ParameterNode class since C# struct doesn't allow for next pointers.
-        public struct ParameterNode
+        public class ParameterNode
         {
             public VarType type_of_parameter;
             public PassType pass_type;
@@ -246,6 +257,7 @@ namespace oberon_compiler
             public int offset;
             public int size;
             public bool is_parameter;
+            public PassType pass_type;
         }
 
         public struct Constant
@@ -253,6 +265,7 @@ namespace oberon_compiler
             public VarType type_of_constant;
             public int offset;
             public ValueUnion value;
+            public int size;
         }
 
         public struct Function
