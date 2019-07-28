@@ -2,7 +2,7 @@
   "profiles": {
     "oberon-compiler": {
       "commandName": "Project",
-      "commandLineArgs": "t81.obr"
+      "commandLineArgs": "t83.obr"
     }
   }
 }

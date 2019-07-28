@@ -20,30 +20,6 @@ namespace oberon_compiler
             RDParser parser = new RDParser(oberon_file);
             parser.Parse();
 
-            //Begin testing for symbol_table
-            //SymbolTable symbol_table = new SymbolTable();
-
-            //symbol_table.Insert("John", LexicalAnalyzer.Token.idt, 0);
-            //symbol_table.Insert("Bryan", LexicalAnalyzer.Token.idt, 0);
-            //symbol_table.Insert("Pam", LexicalAnalyzer.Token.idt, 0);
-            //symbol_table.Insert("Jamison", LexicalAnalyzer.Token.idt, 1);
-            //symbol_table.Insert("Ande", LexicalAnalyzer.Token.idt, 2);
-            //symbol_table.WriteTable(0);
-
-            //TableEntry node = symbol_table.Lookup("John");
-            //Stack<TableEntry> stack = new Stack<TableEntry>();
-            //stack.Push(node);
-            //TableEntry test = stack.Pop();
-            //test.lexeme = "Jacob";
-            //Console.WriteLine("\nAfter:");
-            //symbol_table.WriteTable(0);
-
-            //Console.WriteLine("\nPrint depth = 1:");
-            //symbol_table.WriteTable(1);
-
-            //Console.WriteLine("\nPrint depth = 2:");
-            //symbol_table.WriteTable(2);
-
             // Hold the output until the user wants to end the program.
             Console.Write("Press a key to end... ");
             Console.ReadKey();

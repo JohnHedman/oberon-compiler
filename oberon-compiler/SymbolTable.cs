@@ -84,6 +84,45 @@ namespace oberon_compiler
             return null;
         }
 
+        public TableEntry[] LookupDepth(int depth)
+        {
+            List<TableEntry> entry_list = new List<TableEntry>();
+
+            for(uint x = 0; x < TableSize; x++)
+            {
+                List<TableEntry> entries = LookupDepthInList(depth, x);
+                foreach (TableEntry entry in entries)
+                {
+                    entry_list.Add(entry);
+                }
+            }
+
+            return entry_list.ToArray();
+        }
+
+        private List<TableEntry> LookupDepthInList(int depth, uint hash_index)
+        {
+            List<TableEntry> entry_list = new List<TableEntry>();
+            LinkedList<TableEntry> list = hash_table[hash_index];
+
+            if(list != null)
+            {
+                LinkedListNode<TableEntry> node = list.First;
+
+                while(node != null)
+                {
+                    if(node.Value.GetSymbolDepth() == depth)
+                    {
+                        entry_list.Add(node.Value);
+                    }
+
+                    node = node.Next;
+                }
+            }
+
+            return entry_list;
+        }
+
 
         public void DeleteDepth(int depth)
         {
@@ -237,7 +276,7 @@ namespace oberon_compiler
         // Public Variables
         public enum VarType { charType, intType, floatType };
         public enum PassType { passByValue, passByReference };
-        public enum EntryType { constEntry, varEntry, functionEntry, moduleEntry };
+        public enum EntryType { constEntry, varEntry, functionEntry, moduleEntry, stringEntry };
         public LexicalAnalyzer.Token token;
         public string lexeme;
         public int symbol_depth;
@@ -278,11 +317,18 @@ namespace oberon_compiler
             public LinkedList<ParameterNode> paramter_list;
         }
 
+        // Added this for assembly code generation, not needed to make TAC
+        public struct StringLiteral
+        {
+            public string value;
+        }
+
         public struct EntryInformation
         {
             public Variable variable;
             public Constant constant;
             public Function function;
+            public StringLiteral stringLiteral;
         }
 
         public struct ValueUnion

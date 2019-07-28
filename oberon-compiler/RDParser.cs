@@ -28,6 +28,8 @@ namespace oberon_compiler
 
         // Holder for NewTemp()
         private static int i = 1;
+        // Holder for NewString()
+        private static int j = 1;
 
 
 
@@ -61,6 +63,9 @@ namespace oberon_compiler
             Prog();
             match(LexicalAnalyzer.Token.eoft);
             OutputThreeAddressCode();
+
+            CodeGenerator generator = new CodeGenerator(tac_path, symbol_table);
+            generator.Generate();
         }
 
         /* Function: Prog
@@ -107,7 +112,7 @@ namespace oberon_compiler
 
                     Console.WriteLine("\nPrinting Depth 1:");
                     symbol_table.WriteTable(1);
-                    symbol_table.DeleteDepth(1);
+                    //symbol_table.DeleteDepth(1);
 
                     TableEntry module = prog_procedures.Peek();
 
@@ -132,7 +137,7 @@ namespace oberon_compiler
                     // We have finished parsing the file, print the last depth and delete from symbol table.
                     Console.WriteLine("\nPrinting Depth 0:");
                     symbol_table.WriteTable(0);
-                    symbol_table.DeleteDepth(0);
+                    //symbol_table.DeleteDepth(0);
 
                     break;
                 default:
@@ -432,12 +437,13 @@ namespace oberon_compiler
             prog_procedures.Pop();
             Console.WriteLine("\nPrinting Depth " + current_depth.ToString() + ":");
             symbol_table.WriteTable(current_depth);
+            // Since Depth > 1, we can delete these rows.
             symbol_table.DeleteDepth(current_depth);
             current_depth -= 1;
 
-            // The current offset will equal the size of local variables.
+            // The current offset will equal the size of local variables + 2.
             // This is not necessary since you must declare all variables inside a procedure before declaring a procedure.
-            current_offset = prog_procedures.Peek().entry_information.function.size_of_local;
+            current_offset = prog_procedures.Peek().entry_information.function.size_of_local + 2;
         }
 
         /* Function: ProcHeading
@@ -865,8 +871,10 @@ namespace oberon_compiler
             }
             else if(lex_analyzer.token == LexicalAnalyzer.Token.stringt)
             {
-                // If it is a string, just print wrs followed by the string litteral
-                EmitCode(FormatTAC("wrs", lex_analyzer.lexeme));
+                // If it is a string, just print wrs followed by the string literal
+                TableEntry temp = NewString();
+                temp.entry_information.stringLiteral.value = lex_analyzer.lexeme.Replace("\"", "").Replace("\'", "");
+                EmitCode(FormatTAC("wrs", temp.lexeme));
                 match(LexicalAnalyzer.Token.stringt);
             }
             else
@@ -934,6 +942,9 @@ namespace oberon_compiler
                 tmp_ptr.entry_information.variable.size = 2;
                 tmp_ptr.entry_information.variable.is_parameter = false;
                 current_offset += 2;
+                current_procedure = prog_procedures.Pop();
+                current_procedure.entry_information.function.size_of_local += 2;
+                prog_procedures.Push(current_procedure);
 
                 string op = lex_analyzer.lexeme;
                 match(LexicalAnalyzer.Token.addopt);
@@ -984,6 +995,9 @@ namespace oberon_compiler
                 tmp_ptr.entry_information.variable.size = 2;
                 tmp_ptr.entry_information.variable.is_parameter = false;
                 current_offset += 2;
+                current_procedure = prog_procedures.Pop();
+                current_procedure.entry_information.function.size_of_local += 2;
+                prog_procedures.Push(current_procedure);
 
                 string op = lex_analyzer.lexeme;
                 match(LexicalAnalyzer.Token.mulopt);
@@ -1028,6 +1042,9 @@ namespace oberon_compiler
                     F_ptr.entry_information.variable.size = 2; F_ptr.entry_information.variable.is_parameter = false;
                     F_ptr.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
                     current_offset += 2;
+                    current_procedure = prog_procedures.Pop();
+                    current_procedure.entry_information.function.size_of_local += 2;
+                    prog_procedures.Push(current_procedure);
                     EmitCode(FormatTAC(ConvertVar(F_ptr), "=", lex_analyzer.lexeme));
                     match(LexicalAnalyzer.Token.intt);
                     break;
@@ -1037,6 +1054,9 @@ namespace oberon_compiler
                     F_ptr.entry_information.variable.size = 4; F_ptr.entry_information.variable.is_parameter = false;
                     F_ptr.entry_information.variable.type_of_variable = TableEntry.VarType.floatType;
                     current_offset += 4;
+                    current_procedure = prog_procedures.Pop();
+                    current_procedure.entry_information.function.size_of_local += 4;
+                    prog_procedures.Push(current_procedure);
                     EmitCode(FormatTAC(ConvertVar(F_ptr), "=", lex_analyzer.lexeme));
                     match(LexicalAnalyzer.Token.decimalt);
                     break;
@@ -1056,6 +1076,9 @@ namespace oberon_compiler
                     temp_ptr.entry_information.variable.is_parameter = false;
                     temp_ptr.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
                     temp_ptr.entry_information.variable.offset = current_offset; current_offset += 2;
+                    current_procedure = prog_procedures.Pop();
+                    current_procedure.entry_information.function.size_of_local += 2;
+                    prog_procedures.Push(current_procedure);
 
                     match(LexicalAnalyzer.Token.tildet);
                     F_ptr = Factor(F_ptr);
@@ -1080,6 +1103,9 @@ namespace oberon_compiler
                         temp_ptr.entry_information.variable.is_parameter = false;
                         temp_ptr.entry_information.variable.type_of_variable = TableEntry.VarType.intType;
                         temp_ptr.entry_information.variable.offset = current_offset; current_offset += 2;
+                        current_procedure = prog_procedures.Pop();
+                        current_procedure.entry_information.function.size_of_local += 2;
+                        prog_procedures.Push(current_procedure);
 
                         // Get the Factor we need to negate
                         F_ptr = Factor(F_ptr);
@@ -1602,6 +1628,20 @@ namespace oberon_compiler
             i++;
             return entry;
         }
+
+        private TableEntry NewString()
+        {
+            string temp = "_s" + j.ToString();
+            symbol_table.Insert(temp, LexicalAnalyzer.Token.stringt, 1, lex_analyzer);
+
+            TableEntry entry = symbol_table.Lookup(temp);
+            entry.type_of_entry = TableEntry.EntryType.stringEntry;
+
+            j++;
+            return entry;
+        }
+
+
 
         private void EmitCode(string code)
         {
